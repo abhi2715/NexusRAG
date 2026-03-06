@@ -1,20 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import Cursor    from './Cursor';
-import Sidebar   from './Sidebar';
-import ChatArea  from './ChatArea';
-import HistoryItem from './HistoryItem';
-import { C }         from '../styles/tokens';
+import Cursor from './Cursor';
+import Sidebar from './Sidebar';
+import ChatArea from './ChatArea';
+import { C } from '../styles/tokens';
 import { useSessions } from '../hooks/useSessions';
-import { useDocs }     from '../hooks/useDocs';
+import { useDocs } from '../hooks/useDocs';
 import { retrieveChunks } from '../utils/nlp';
-import { groqChat }       from '../utils/groq';
+import { groqChat } from '../utils/groq';
 
 export default function NexusRAG() {
   const { sessions, activeId, setActiveId, activeSession, newSession, updateSession, deleteSession } = useSessions();
   const { docs, processing, dragging, setDragging, handleFiles, removeDoc } = useDocs();
 
-  const [input,      setInput]      = useState('');
-  const [loading,    setLoading]    = useState(false);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
   const inputRef = useRef();
 
@@ -36,16 +35,16 @@ export default function NexusRAG() {
     const userMsg = { role: 'user', content: text, ts: new Date().toISOString() };
     updateSession(sid, s => ({
       ...s,
-      title:   s.title === 'New Chat' ? text.slice(0, 45) : s.title,
-      docIds:  readyDocs.map(d => d.id),
+      title: s.title === 'New Chat' ? text.slice(0, 45) : s.title,
+      docIds: readyDocs.map(d => d.id),
       messages: [...s.messages, userMsg],
     }));
 
     setLoading(true);
     try {
       // RAG retrieval
-      const pdfDocs  = readyDocs.filter(d => d.b64);
-      const chunks   = retrieveChunks(text, readyDocs, 6);
+      const pdfDocs = readyDocs.filter(d => d.b64);
+      const chunks = retrieveChunks(text, readyDocs, 6);
       const usedNames = new Set(chunks.map(c => c.docName));
 
       let ctx = ''; let ctxLen = 0;
@@ -80,7 +79,7 @@ export default function NexusRAG() {
       const aiText = await groqChat(system, history, userText);
 
       const sources = readyDocs.filter(d => usedNames.has(d.name)).map(d => ({ name: d.name, type: d.type }));
-      const aiMsg   = { role: 'assistant', content: aiText, ts: new Date().toISOString(), sources };
+      const aiMsg = { role: 'assistant', content: aiText, ts: new Date().toISOString(), sources };
       updateSession(sid, s => ({ ...s, messages: [...s.messages, aiMsg] }));
     } catch (err) {
       const errMsg = { role: 'assistant', content: `**Error:** ${err.message}`, ts: new Date().toISOString(), sources: [] };

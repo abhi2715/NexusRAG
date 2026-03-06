@@ -4,7 +4,6 @@ import HistoryItem from './HistoryItem';
 
 export default function Sidebar({ docs, processing, dragging, setDragging, handleFiles, removeDoc, sessions, activeId, setActiveId, newSession, onDeleteSession }) {
   const fileRef = useRef();
-  const readyDocs = docs.filter(d => d.status === 'ready');
 
   return (
     <aside style={{ width: 264, minWidth: 264, background: C.side, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -53,7 +52,7 @@ export default function Sidebar({ docs, processing, dragging, setDragging, handl
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.status === 'ready' ? C.text : C.text2 }}>{d.name}</span>
                 <span style={{ fontSize: '0.57rem', color: C.text3, flexShrink: 0 }}>{d.size}</span>
                 {d.status === 'processing' && <span style={{ fontSize: '0.58rem', color: C.accent }}>…</span>}
-                {d.status === 'error'      && <span style={{ fontSize: '0.58rem', color: C.red }}>✕</span>}
+                {d.status === 'error' && <span style={{ fontSize: '0.58rem', color: C.red }}>✕</span>}
                 <button className="clickable" onClick={() => removeDoc(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 10, padding: 2, flexShrink: 0, transition: 'color 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.color = C.red}
                   onMouseLeave={e => e.currentTarget.style.color = C.text3}>✕</button>
