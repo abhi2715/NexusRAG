@@ -10,6 +10,13 @@ export default function Cursor() {
   const clicking = useRef(false);
 
   useEffect(() => {
+    // Don't render on touch devices
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      if (dot.current) dot.current.style.display = 'none';
+      if (ring.current) ring.current.style.display = 'none';
+      return;
+    }
+
     let raf;
     const onMove  = e => { pos.current = { x: e.clientX, y: e.clientY }; };
     const onDown  = () => { clicking.current = true; };

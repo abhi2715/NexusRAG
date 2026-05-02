@@ -8,6 +8,28 @@ import { useDocs } from '../hooks/useDocs';
 import { retrieveChunks } from '../utils/nlp';
 import { groqChat } from '../utils/groq';
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    setIsMobile(mq.matches);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    setIsTouch('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+  return isTouch;
+}
+
 export default function NexusRAG() {
   const {
     sessions,
@@ -31,13 +53,29 @@ export default function NexusRAG() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
+
+  const isMobile = useIsMobile();
+  const isTouch = useIsTouchDevice();
 
   // Scroll to bottom on new message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeSession?.messages?.length, loading]);
+
+  // Close sidebar when navigating on mobile
+  const handleSetActiveId = useCallback((id) => {
+    setActiveId(id);
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile, setActiveId]);
+
+  const handleNewSession = useCallback(() => {
+    const id = newSession();
+    if (isMobile) setSidebarOpen(false);
+    return id;
+  }, [isMobile, newSession]);
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const send = useCallback(async () => {
@@ -149,15 +187,30 @@ export default function NexusRAG() {
     <div
       style={{
         display: 'flex',
-        height: '100vh',
+        height: 'var(--app-height, 100vh)',
         background: C.bg,
         fontFamily: "'Inter',system-ui,sans-serif",
         color: C.text,
         overflow: 'hidden',
-        cursor: 'none',
+        cursor: isTouch ? 'auto' : 'none',
+        position: 'relative',
       }}
     >
-      <Cursor />
+      {!isTouch && <Cursor />}
+
+      {/* ── Mobile Sidebar Overlay ── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 399,
+            backdropFilter: 'blur(4px)',
+          }}
+        />
+      )}
 
       {/* ── Delete confirm modal ── */}
       {confirmDel !== null && (
@@ -208,7 +261,7 @@ export default function NexusRAG() {
                   border: `1px solid ${C.border2}`,
                   borderRadius: 9,
                   color: C.text2,
-                  cursor: 'pointer',
+                  cursor: isTouch ? 'pointer' : 'none',
                   fontFamily: 'inherit',
                   fontSize: '0.8rem',
                   transition: 'all 0.15s',
@@ -237,7 +290,7 @@ export default function NexusRAG() {
                   border: '1px solid rgba(240,85,85,0.3)',
                   borderRadius: 9,
                   color: C.red,
-                  cursor: 'pointer',
+                  cursor: isTouch ? 'pointer' : 'none',
                   fontFamily: 'inherit',
                   fontSize: '0.8rem',
                   fontWeight: 600,
@@ -266,9 +319,13 @@ export default function NexusRAG() {
         removeDoc={removeDoc}
         sessions={sessions}
         activeId={activeId}
-        setActiveId={setActiveId}
-        newSession={newSession}
+        setActiveId={handleSetActiveId}
+        newSession={handleNewSession}
         onDeleteSession={(id) => setConfirmDel(id)}
+        isMobile={isMobile}
+        sidebarOpen={sidebarOpen}
+        isTouch={isTouch}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <ChatArea
@@ -280,18 +337,28 @@ export default function NexusRAG() {
         onSend={send}
         inputRef={inputRef}
         bottomRef={bottomRef}
+        isMobile={isMobile}
+        isTouch={isTouch}
+        onToggleSidebar={() => setSidebarOpen((p) => !p)}
       />
 
       <style>{`
+        :root { --app-height: 100vh; }
+        @supports (height: 100dvh) { :root { --app-height: 100dvh; } }
         @keyframes bounce { 0%,60%,100%{transform:translateY(0);opacity:.35} 30%{transform:translateY(-6px);opacity:1} }
         @keyframes float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes pulse  { 0%,100%{opacity:0.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
         @keyframes spin   { to{transform:rotate(360deg)} }
+        @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: #22253a; border-radius: 4px; }
         ::selection { background: rgba(91,142,245,0.25); }
-        textarea, input { cursor: none !important; }
+        ${!isTouch ? 'textarea, input { cursor: none !important; }' : ''}
+
+        @media (max-width: 767px) {
+          body { overflow: hidden; }
+        }
       `}</style>
     </div>
   );

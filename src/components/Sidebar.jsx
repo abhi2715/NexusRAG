@@ -14,19 +14,39 @@ export default function Sidebar({
   setActiveId,
   newSession,
   onDeleteSession,
+  isMobile,
+  sidebarOpen,
+  onClose,
+  isTouch,
 }) {
   const fileRef = useRef(null);
+
+  const sidebarWidth = isMobile ? '85vw' : 264;
+  const maxSidebarWidth = isMobile ? 320 : 264;
 
   return (
     <aside
       style={{
-        width: 264,
-        minWidth: 264,
+        width: sidebarWidth,
+        maxWidth: maxSidebarWidth,
+        minWidth: isMobile ? 0 : 264,
         background: C.side,
         borderRight: `1px solid ${C.border}`,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        ...(isMobile
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              zIndex: 400,
+              transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)',
+              boxShadow: sidebarOpen ? '4px 0 30px rgba(0,0,0,0.5)' : 'none',
+            }
+          : {}),
       }}
     >
       {/* Brand */}
@@ -62,10 +82,37 @@ export default function Sidebar({
             ⚡
           </div>
           <div
-            style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.3px' }}
+            style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.3px', flex: 1 }}
           >
             Nexus<span style={{ color: C.accent }}>RAG</span>
           </div>
+
+          {/* Close button on mobile */}
+          {isMobile && (
+            <button
+              className="clickable"
+              onClick={() => onClose && onClose()}
+              style={{
+                background: 'none',
+                border: `1px solid ${C.border2}`,
+                borderRadius: 8,
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: C.text2,
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <button
