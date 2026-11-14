@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "lucide-react": "^0.460.0",
+    "mammoth": "^1.8.0",
     "pdfjs-dist": "^5.5.207",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+    "react-markdown": "^9.0.1",
+    "react-scripts": "5.0.1",
+    "rehype-highlight": "^7.0.0",
+    "remark-gfm": "^4.0.0"
   },
   "scripts": {
     "start": "react-scripts start",

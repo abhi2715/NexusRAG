@@ -1,58 +1,93 @@
-import { useState, useCallback } from 'react';
-import { extractText } from '../utils/extractors';
-import { chunkText }   from '../utils/nlp';
-import { getType, fmtSz } from '../utils/format';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { extractFile } from '../utils/extractors';
+import { chunkSegments, forgetDoc } from '../utils/nlp';
+import { getType, uid, countWords } from '../utils/format';
+import { dbGetAll, dbPut, dbDelete, dbClear, STORES } from '../utils/db';
 
-export function useDocs() {
-  const [docs, setDocs]           = useState([]);
-  const [processing, setProcessing] = useState('');
-  const [dragging, setDragging]   = useState(false);
+const MAX_BYTES = 50 * 1024 * 1024;
 
-  const processFile = useCallback(async (file) => {
-    if (file.size > 30 * 1024 * 1024) { alert('Max file size is 30MB'); return; }
+const persistable = d => (d.status === 'ready' ? dbPut(STORES.docs, d) : null);
 
-    const type = getType(file.name);
-    const id   = 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const doc  = { id, name: file.name, type, size: fmtSz(file.size), content: '', chunks: [], status: 'processing' };
+export function useDocs({ onReady, onError } = {}) {
+  const [docs, setDocs] = useState([]);
+  const cbs = useRef({ onReady, onError });
+  cbs.current = { onReady, onError };
 
+  useEffect(() => {
+    dbGetAll(STORES.docs).then(saved =>
+      setDocs(saved.sort((a, b) => (a.addedAt || '').localeCompare(b.addedAt || ''))));
+  }, []);
+
+  const patch = useCallback((id, p, { persist = true } = {}) => {
+    setDocs(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      const next = { ...d, ...(typeof p === 'function' ? p(d) : p) };
+      if (persist) persistable(next);
+      return next;
+    }));
+  }, []);
+
+  const ingest = useCallback(async (name, size, getSegments) => {
+    const id = uid('d_');
+    const doc = {
+      id, name, type: getType(name), size, status: 'processing', progress: 0, enabled: true,
+      addedAt: new Date().toISOString(), chunks: [], words: 0, chars: 0,
+    };
     setDocs(prev => [...prev, doc]);
-    setProcessing(`Reading ${file.name}…`);
-
     try {
-      const result = await extractText(file);
-      setProcessing(`Indexing ${file.name}…`);
-      await new Promise(r => setTimeout(r, 10));
-
-      if (result && typeof result === 'object' && result.b64) {
-        // PDF — store b64 + extracted text
-        const pdfText  = result.extractedText || '';
-        const pdfChunks = pdfText.length > 50
-          ? chunkText(pdfText)
-          : [`[PDF: ${result.name}]`];
-        setDocs(prev => prev.map(d =>
-          d.id === id
-            ? { ...d, b64: result.b64, content: pdfText || '[PDF binary]', chunks: pdfChunks, status: 'ready' }
-            : d
-        ));
-      } else {
-        const text   = String(result || '');
-        const chunks = chunkText(text);
-        setDocs(prev => prev.map(d => d.id === id ? { ...d, content: text, chunks, status: 'ready' } : d));
-      }
+      const { segments, meta } = await getSegments(p => patch(id, { progress: p }, { persist: false }));
+      const chunks = chunkSegments(segments);
+      const full = segments.map(s => s.text).join('\n\n');
+      if (!full.trim()) throw new Error('No readable text found.');
+      const ready = {
+        ...doc, ...meta, status: 'ready', progress: 1, chunks,
+        words: countWords(full), chars: full.length,
+      };
+      setDocs(prev => prev.map(d => (d.id === id ? { ...ready, enabled: d.enabled } : d)));
+      dbPut(STORES.docs, ready);
+      cbs.current.onReady?.(ready);
     } catch (err) {
       console.error(err);
-      setDocs(prev => prev.map(d => d.id === id ? { ...d, status: 'error' } : d));
+      patch(id, { status: 'error', error: err.message || String(err) }, { persist: false });
+      cbs.current.onError?.(name, err);
     }
-    setProcessing('');
-  }, []);
+  }, [patch]);
 
-  const handleFiles = useCallback((files) => {
-    Array.from(files).forEach(processFile);
-  }, [processFile]);
+  const addFiles = useCallback(files => {
+    Array.from(files).forEach(file => {
+      if (file.size > MAX_BYTES) {
+        cbs.current.onError?.(file.name, new Error('File is larger than 50 MB.'));
+        return;
+      }
+      ingest(file.name, file.size, onProgress => extractFile(file, onProgress));
+    });
+  }, [ingest]);
 
-  const removeDoc = useCallback((id) => {
+  const addText = useCallback((name, text) => {
+    const fname = /\.\w+$/.test(name) ? name : `${name}.txt`;
+    ingest(fname, new Blob([text]).size, async () => ({ segments: [{ text }], meta: {} }));
+  }, [ingest]);
+
+  const removeDoc = useCallback(id => {
     setDocs(prev => prev.filter(d => d.id !== id));
+    forgetDoc(id);
+    dbDelete(STORES.docs, id);
   }, []);
 
-  return { docs, processing, dragging, setDragging, handleFiles, removeDoc };
+  const toggleDoc = useCallback(id => patch(id, d => ({ enabled: !d.enabled })), [patch]);
+  const setAllEnabled = useCallback(enabled => {
+    setDocs(prev => prev.map(d => {
+      const next = { ...d, enabled };
+      persistable(next);
+      return next;
+    }));
+  }, []);
+
+  const clearDocs = useCallback(() => {
+    docs.forEach(d => forgetDoc(d.id));
+    setDocs([]);
+    dbClear(STORES.docs);
+  }, [docs]);
+
+  return { docs, addFiles, addText, removeDoc, toggleDoc, setAllEnabled, patchDoc: patch, clearDocs };
 }

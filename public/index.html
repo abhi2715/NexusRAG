@@ -1,40 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#07080e" />
-    <meta name="description" content="NexusRAG — Intelligent Document Chat powered by Groq + Llama" />
+    <meta name="description" content="NexusRAG: chat with your PDFs, Word docs, spreadsheets and notes. Cited answers powered by Groq." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta property="og:title" content="NexusRAG" />
+    <meta property="og:description" content="Chat with your documents. Cited, streaming answers powered by Groq." />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/favicon.svg" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>NexusRAG</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html { height: 100%; }
-      body {
-        background: #07080e;
-        font-family: 'Inter', system-ui, sans-serif;
-        overflow: hidden;
-        height: 100%;
-        height: 100dvh;
-        -webkit-text-size-adjust: 100%;
-        -webkit-tap-highlight-color: transparent;
-      }
-      #root { height: 100%; }
-
-      /* Safe area insets for notch devices */
-      @supports (padding: env(safe-area-inset-bottom)) {
-        body {
-          padding-bottom: env(safe-area-inset-bottom);
-          padding-left: env(safe-area-inset-left);
-          padding-right: env(safe-area-inset-right);
-        }
-      }
-    </style>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        var s = JSON.parse(localStorage.getItem('nexusrag_settings_v2') || '{}');
+        var t = s.theme === 'system'
+          ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : (s.theme === 'light' ? 'light' : 'dark');
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
+    <noscript>You need to enable JavaScript to run NexusRAG.</noscript>
     <div id="root"></div>
   </body>
 </html>

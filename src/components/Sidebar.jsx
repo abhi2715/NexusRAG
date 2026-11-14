@@ -1,365 +1,159 @@
-import { useRef } from 'react';
-import { C, FC, FI } from '../styles/tokens';
-import HistoryItem from './HistoryItem';
+import { useRef, useState, useMemo, memo } from 'react';
+import { Zap, Plus, Search, X, UploadCloud, ClipboardPaste, Eye, Trash2, Pin, Pencil, Settings, AlertCircle, MessageSquare, CheckSquare, Square } from 'lucide-react';
+import { badgeStyle, fileMeta } from '../styles/tokens';
+import { fmtSz, fmtNum, relativeGroup, ACCEPT } from '../utils/format';
 
-export default function Sidebar({
-  docs,
-  processing,
-  dragging,
-  setDragging,
-  handleFiles,
-  removeDoc,
-  sessions,
-  activeId,
-  setActiveId,
-  newSession,
-  onDeleteSession,
-  isMobile,
-  sidebarOpen,
-  onClose,
-  isTouch,
-}) {
-  const fileRef = useRef(null);
-
-  const sidebarWidth = isMobile ? '85vw' : 264;
-  const maxSidebarWidth = isMobile ? 320 : 264;
+function DocItem({ doc, onToggle, onPreview, onRemove }) {
+  const meta = fileMeta(doc.type);
+  const sub = doc.status === 'error'
+    ? doc.error
+    : doc.status === 'processing'
+      ? `Processing… ${Math.round((doc.progress || 0) * 100)}%`
+      : [doc.pages && `${doc.pages} pages`, doc.rows && `${fmtNum(doc.rows)} rows`, `${fmtNum(doc.words)} words`, fmtSz(doc.size)].filter(Boolean).join(' · ');
 
   return (
-    <aside
-      style={{
-        width: sidebarWidth,
-        maxWidth: maxSidebarWidth,
-        minWidth: isMobile ? 0 : 264,
-        background: C.side,
-        borderRight: `1px solid ${C.border}`,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        ...(isMobile
-          ? {
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              bottom: 0,
-              zIndex: 400,
-              transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-              transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)',
-              boxShadow: sidebarOpen ? '4px 0 30px rgba(0,0,0,0.5)' : 'none',
-            }
-          : {}),
-      }}
-    >
-      {/* Brand */}
-      <div
-        style={{
-          padding: '16px 14px 12px',
-          borderBottom: `1px solid ${C.border}`,
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              background: 'linear-gradient(135deg,#5b8ef5,#a066ff)',
-              borderRadius: 10,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 15,
-              flexShrink: 0,
-              boxShadow: '0 0 16px rgba(91,142,245,0.25)',
-            }}
-          >
-            ⚡
-          </div>
-          <div
-            style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.3px', flex: 1 }}
-          >
-            Nexus<span style={{ color: C.accent }}>RAG</span>
-          </div>
-
-          {/* Close button on mobile */}
-          {isMobile && (
-            <button
-              className="clickable"
-              onClick={() => onClose && onClose()}
-              style={{
-                background: 'none',
-                border: `1px solid ${C.border2}`,
-                borderRadius: 8,
-                width: 32,
-                height: 32,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: C.text2,
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'all 0.15s',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
+    <div className={`doc-item${doc.enabled === false ? ' disabled' : ''}`} style={doc.status === 'error' ? { borderColor: 'rgba(240,85,85,.35)' } : undefined}>
+      <div className="doc-icon" style={badgeStyle(doc.type)}>{doc.status === 'processing' ? <span className="spinner" /> : meta.label}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <button className="doc-name" style={{ display: 'block', width: '100%' }} onClick={() => doc.status === 'ready' && onPreview(doc)} title={doc.name}>{doc.name}</button>
+        <div className="doc-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: doc.status === 'error' ? 'var(--red)' : undefined }} title={sub}>
+          {doc.status === 'error' && <AlertCircle size={10} style={{ verticalAlign: -1, marginRight: 3 }} />}{sub}
         </div>
+        {doc.status === 'processing' && <div className="doc-progress"><div style={{ width: `${Math.max(5, (doc.progress || 0) * 100)}%` }} /></div>}
+      </div>
+      {doc.status === 'ready' && (
+        <>
+          <button className="icon-btn sm hide-mobile" onClick={() => onPreview(doc)} title="Preview"><Eye size={12} /></button>
+          <button className={`toggle${doc.enabled !== false ? ' on' : ''}`} onClick={() => onToggle(doc.id)} title={doc.enabled !== false ? 'Included in answers (click to exclude)' : 'Excluded (click to include)'} aria-label="Include in context" />
+        </>
+      )}
+      <button className="icon-btn sm danger" onClick={() => onRemove(doc)} title="Remove"><Trash2 size={12} /></button>
+    </div>
+  );
+}
 
-        <button
-          className="clickable"
-          onClick={() => newSession()}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            background: C.accentGlow,
-            border: `1px solid ${C.border2}`,
-            borderRadius: 9,
-            color: C.accent,
-            fontWeight: 600,
-            fontSize: '0.8rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            fontFamily: 'inherit',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(91,142,245,0.2)';
-            e.currentTarget.style.borderColor = C.accent;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = C.accentGlow;
-            e.currentTarget.style.borderColor = C.border2;
-          }}
-        >
-          <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> New Conversation
+function HistoryItem({ session, active, onSelect, onRename, onTogglePin, onDelete }) {
+  const count = session.messages.filter(m => m.role === 'user').length;
+  return (
+    <div className={`history-item clickable${active ? ' active' : ''}`} role="button" tabIndex={0} onClick={onSelect}
+      onKeyDown={e => e.key === 'Enter' && onSelect()}>
+      <div className="h-title">{session.pinned && <Pin size={10} style={{ color: 'var(--accent)', flexShrink: 0 }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.title}</span></div>
+      <div className="h-meta">{count} message{count !== 1 ? 's' : ''}</div>
+      <div className="h-actions" onClick={e => e.stopPropagation()}>
+        <button className="icon-btn sm" onClick={onRename} title="Rename"><Pencil size={11} /></button>
+        <button className={`icon-btn sm${session.pinned ? ' active' : ''}`} onClick={onTogglePin} title={session.pinned ? 'Unpin' : 'Pin'}><Pin size={11} /></button>
+        <button className="icon-btn sm danger" onClick={onDelete} title="Delete"><Trash2 size={11} /></button>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({
+  open, isMobile, onClose, docs, onFiles, onAddText, onToggleDoc, onSetAllDocs, onPreviewDoc, onRemoveDoc,
+  sessions, activeId, onSelect, onNew, onRename, onTogglePin, onDelete, onOpenSettings, hasKey, model, dragging,
+}) {
+  const fileRef = useRef(null);
+  const [query, setQuery] = useState('');
+
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? sessions.filter(s => s.title.toLowerCase().includes(q) || s.messages.some(m => m.content?.toLowerCase().includes(q)))
+      : sessions;
+    const out = [];
+    const pinned = list.filter(s => s.pinned);
+    if (pinned.length) out.push(['Pinned', pinned]);
+    const byGroup = new Map();
+    list.filter(s => !s.pinned).forEach(s => {
+      const g = relativeGroup(s.updatedAt || s.createdAt);
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(s);
+    });
+    return [...out, ...byGroup];
+  }, [sessions, query]);
+
+  const ready = docs.filter(d => d.status === 'ready');
+  const allOn = ready.length > 0 && ready.every(d => d.enabled !== false);
+
+  const cls = `sidebar${isMobile ? (open ? ' open' : '') : (open ? '' : ' collapsed')}`;
+
+  return (
+    <aside className={cls} aria-label="Sidebar">
+      <div className="sidebar-section">
+        <div className="brand">
+          <div className="logo"><Zap size={17} /></div>
+          <div className="brand-name">Nexus<span>RAG</span></div>
+          {isMobile && <button className="icon-btn bordered" onClick={onClose} aria-label="Close sidebar"><X size={15} /></button>}
+        </div>
+        <button className="btn btn-soft btn-block" onClick={onNew} style={{ justifyContent: 'flex-start' }}>
+          <Plus size={15} /> New chat <span style={{ marginLeft: 'auto' }} className="kbd hide-mobile">⌘⇧O</span>
         </button>
       </div>
 
-      {/* Upload zone */}
-      <div
-        style={{
-          padding: '12px 14px',
-          borderBottom: `1px solid ${C.border}`,
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontSize: '0.58rem',
-            fontWeight: 700,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            color: C.text3,
-            display: 'block',
-            marginBottom: 8,
-          }}
-        >
-          Documents
-        </span>
-
-        <div
-          className="clickable"
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            handleFiles(e.dataTransfer.files);
-          }}
-          style={{
-            border: `1.5px dashed ${dragging ? C.accent : C.border2}`,
-            borderRadius: 10,
-            padding: '14px 10px',
-            textAlign: 'center',
-            cursor: 'pointer',
-            background: dragging ? C.accentGlow : C.card,
-            transition: 'all 0.2s',
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            accept=".pdf,.docx,.doc,.csv,.txt"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              handleFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <div style={{ fontSize: 18, marginBottom: 4 }}>📎</div>
-          <div style={{ fontSize: '0.72rem', color: C.text2, lineHeight: 1.5 }}>
-            <span style={{ color: C.accent, fontWeight: 600 }}>Click</span> or drag &amp; drop
-          </div>
-          <div style={{ fontSize: '0.59rem', color: C.text3, marginTop: 3 }}>
-            PDF · DOCX · CSV · TXT
-          </div>
-        </div>
-
-        {processing && (
-          <div
-            style={{
-              fontSize: '0.65rem',
-              color: C.accent,
-              marginTop: 6,
-              textAlign: 'center',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-            }}
-          >
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: C.accent,
-                animation: 'pulse 1s infinite',
-              }}
-            />
-            {processing}
-          </div>
-        )}
-
-        <div style={{ maxHeight: 120, overflowY: 'auto', marginTop: 4 }}>
-          {docs.map((d) => {
-            const f = FC[d.type] ?? FC.txt;
-            return (
-              <div
-                key={d.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  padding: '6px 9px',
-                  background: C.card,
-                  border: `1px solid ${d.status === 'ready' ? f.br : C.border}`,
-                  borderRadius: 7,
-                  fontSize: '0.68rem',
-                  color: C.text2,
-                  marginTop: 4,
-                  transition: 'border-color 0.2s',
-                }}
-              >
-                <span>{FI[d.type] ?? '📄'}</span>
-                <span
-                  style={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    color: d.status === 'ready' ? C.text : C.text2,
-                  }}
-                >
-                  {d.name}
-                </span>
-                <span style={{ fontSize: '0.57rem', color: C.text3, flexShrink: 0 }}>
-                  {d.size}
-                </span>
-                {d.status === 'processing' && (
-                  <span style={{ fontSize: '0.58rem', color: C.accent }}>…</span>
-                )}
-                {d.status === 'error' && (
-                  <span style={{ fontSize: '0.58rem', color: C.red }}>✕</span>
-                )}
-                <button
-                  className="clickable"
-                  onClick={() => removeDoc(d.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: C.text3,
-                    fontSize: 10,
-                    padding: 2,
-                    flexShrink: 0,
-                    transition: 'color 0.15s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = C.red;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = C.text3;
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* History */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.58rem',
-              fontWeight: 700,
-              letterSpacing: '2px',
-              textTransform: 'uppercase',
-              color: C.text3,
-            }}
-          >
-            History
-          </span>
-          {sessions.length > 0 && (
-            <span style={{ fontSize: '0.58rem', color: C.text3 }}>
-              {sessions.length} chat{sessions.length !== 1 ? 's' : ''}
-            </span>
+      <div className="sidebar-section">
+        <div className="section-label">
+          <span>Documents</span>
+          {ready.length > 1 && (
+            <button className="count" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text3)', fontSize: '.62rem' }} onClick={() => onSetAllDocs(!allOn)}>
+              {allOn ? <CheckSquare size={11} /> : <Square size={11} />} {allOn ? 'All on' : 'Enable all'}
+            </button>
           )}
         </div>
-
-        {sessions.length === 0 && (
-          <div
-            style={{
-              fontSize: '0.7rem',
-              color: C.text3,
-              textAlign: 'center',
-              paddingTop: 16,
-              lineHeight: 1.7,
-            }}
-          >
-            No chats yet.<br />Start by asking a question!
+        <input ref={fileRef} type="file" multiple accept={ACCEPT} hidden onChange={e => { onFiles(e.target.files); e.target.value = ''; }} />
+        <button className={`dropzone${dragging ? ' drag' : ''}`} onClick={() => fileRef.current?.click()}>
+          <UploadCloud size={20} color="var(--accent)" />
+          <div className="dz-title"><b>Click</b> or drop files anywhere</div>
+          <div className="dz-sub">PDF · DOCX · CSV · MD · JSON · HTML · code · up to 50 MB</div>
+        </button>
+        <button className="btn btn-sm btn-block" style={{ marginTop: 6 }} onClick={onAddText}><ClipboardPaste size={12} /> Paste text as document</button>
+        {docs.length > 0 && (
+          <div className="doc-list">
+            {docs.map(d => <DocItem key={d.id} doc={d} onToggle={onToggleDoc} onPreview={onPreviewDoc} onRemove={onRemoveDoc} />)}
           </div>
         )}
+      </div>
 
-        {sessions.map((s) => (
-          <HistoryItem
-            key={s.id}
-            session={s}
-            isActive={s.id === activeId}
-            docs={docs}
-            onClick={() => setActiveId(s.id)}
-            onDelete={() => onDeleteSession(s.id)}
-          />
+      <div className="history">
+        <div className="search-box">
+          <Search size={13} />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search chats…" aria-label="Search chats" />
+          {query && <button className="icon-btn sm" onClick={() => setQuery('')} aria-label="Clear search"><X size={12} /></button>}
+        </div>
+        {sessions.length === 0 && (
+          <div style={{ fontSize: '.72rem', color: 'var(--text3)', textAlign: 'center', paddingTop: 20, lineHeight: 1.7 }}>
+            <MessageSquare size={18} style={{ marginBottom: 6 }} /><br />No chats yet.<br />Ask a question to start one.
+          </div>
+        )}
+        {sessions.length > 0 && groups.length === 0 && (
+          <div style={{ fontSize: '.72rem', color: 'var(--text3)', textAlign: 'center', paddingTop: 16 }}>No chats match “{query}”.</div>
+        )}
+        {groups.map(([label, list]) => (
+          <div key={label}>
+            <div className="history-group">{label}</div>
+            {list.map(s => (
+              <HistoryItem
+                key={s.id}
+                session={s}
+                active={s.id === activeId}
+                onSelect={() => onSelect(s.id)}
+                onRename={() => onRename(s.id)}
+                onTogglePin={() => onTogglePin(s.id)}
+                onDelete={() => onDelete(s.id)}
+              />
+            ))}
+          </div>
         ))}
+      </div>
+
+      <div className="sidebar-footer">
+        <span className="status-dot" style={{ background: hasKey ? 'var(--green)' : 'var(--yellow)', boxShadow: `0 0 8px ${hasKey ? 'var(--green)' : 'var(--yellow)'}` }} />
+        <span style={{ fontSize: '.66rem', color: 'var(--text2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {hasKey ? model.split('/').pop() : 'No API key set'}
+        </span>
+        <button className="icon-btn sm" onClick={onOpenSettings} title="Settings"><Settings size={14} /></button>
       </div>
     </aside>
   );
 }
+
+export default memo(Sidebar);

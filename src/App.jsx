@@ -1,5 +1,10 @@
 import NexusRAG from './components/NexusRAG';
+import { ToastProvider } from './components/Toasts';
 
 export default function App() {
-  return <NexusRAG />;
+  return (
+    <ToastProvider>
+      <NexusRAG />
+    </ToastProvider>
+  );
 }

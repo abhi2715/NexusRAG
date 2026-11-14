@@ -1,47 +1,67 @@
-function inl(t) {
-  return t.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g).map((p, i) => {
-    if (/^\*\*/.test(p)) return <strong key={i} style={{ color: '#f0c97a', fontWeight: 600 }}>{p.slice(2, -2)}</strong>;
-    if (/^`/.test(p))    return <code   key={i} style={{ background: '#1a1b2e', padding: '1px 6px', borderRadius: 4, color: '#3dd68c', fontFamily: 'monospace', fontSize: '0.82em', border: '1px solid #252840' }}>{p.slice(1, -1)}</code>;
-    if (/^\*/.test(p))   return <em     key={i} style={{ color: '#7eb8f7', fontStyle: 'normal' }}>{p.slice(1, -1)}</em>;
-    return p;
+import { memo, useState, Children } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import { Copy, Check } from 'lucide-react';
+
+function textOf(node) {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (node?.props?.children) return textOf(node.props.children);
+  return '';
+}
+
+function CodeBlock({ children }) {
+  const [copied, setCopied] = useState(false);
+  const child = Children.toArray(children)[0];
+  const lang = (child?.props?.className || '').match(/language-([\w-]+)/)?.[1] || 'text';
+  const copy = () => {
+    navigator.clipboard?.writeText(textOf(child).replace(/\n$/, ''));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="code-block">
+      <div className="code-head">
+        <span>{lang}</span>
+        <button className="icon-btn sm" onClick={copy} aria-label="Copy code">
+          {copied ? <Check size={13} color="var(--green)" /> : <Copy size={13} />}
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
+// Turn bare [n] / [n, m] citation markers into links we can intercept (but leave [text](url) alone).
+// Only numbers that match a real source become links; anything else is left as plain text.
+const linkifyCitations = (text, valid) =>
+  text.replace(/\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()/g, (match, nums) => {
+    const ns = nums.split(/\s*,\s*/);
+    return ns.every(n => valid.has(Number(n))) ? ns.map(n => `[${n}](#cite-${n})`).join('') : match;
   });
+
+function MD({ text, onCite, cites }) {
+  const components = {
+    pre: CodeBlock,
+    table: ({ node, ...props }) => <div className="table-wrap"><table {...props} /></div>,
+    a: ({ node, href = '', children, ...props }) => {
+      if (href.startsWith('#cite-')) {
+        const n = Number(href.slice(6));
+        return (
+          <button type="button" className="cite" title={`Source ${n}`} onClick={() => onCite?.(n)}>{n}</button>
+        );
+      }
+      return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+    },
+  };
+  return (
+    <div className="md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { detect: false }]]} components={components}>
+        {onCite && cites?.size ? linkifyCitations(text || '', cites) : text || ''}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
-export default function MD({ text }) {
-  const lines = (text || '').split('\n');
-  const out = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const l = lines[i];
-    if (/^###\s/.test(l)) {
-      out.push(<h4 key={i} style={{ color: '#f0c97a', fontWeight: 700, margin: '10px 0 4px', fontSize: '0.9rem' }}>{l.slice(4)}</h4>);
-      i++;
-    } else if (/^##\s/.test(l)) {
-      out.push(<h3 key={i} style={{ color: '#7eb8f7', fontWeight: 700, margin: '12px 0 4px' }}>{l.slice(3)}</h3>);
-      i++;
-    } else if (/^[-•]\s/.test(l)) {
-      const items = [];
-      while (i < lines.length && /^[-•]\s/.test(lines[i])) {
-        items.push(<li key={i} style={{ margin: '3px 0' }}>{inl(lines[i].slice(2))}</li>);
-        i++;
-      }
-      out.push(<ul key={'ul' + i} style={{ margin: '6px 0 6px 18px' }}>{items}</ul>);
-    } else if (/^\d+\.\s/.test(l)) {
-      const items = [];
-      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
-        items.push(<li key={i} style={{ margin: '3px 0' }}>{inl(lines[i].replace(/^\d+\.\s/, ''))}</li>);
-        i++;
-      }
-      out.push(<ol key={'ol' + i} style={{ margin: '6px 0 6px 18px' }}>{items}</ol>);
-    } else if (l.trim() === '') {
-      out.push(<div key={i} style={{ height: 6 }} />);
-      i++;
-    } else {
-      out.push(<p key={i} style={{ margin: '3px 0', lineHeight: 1.7 }}>{inl(l)}</p>);
-      i++;
-    }
-  }
-
-  return <>{out}</>;
-}
+export default memo(MD);
