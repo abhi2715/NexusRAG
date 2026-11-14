@@ -42,7 +42,7 @@ async function errorFrom(res, proxy) {
  * Stream a chat completion. Calls `onToken(delta, fullText)` as tokens arrive.
  * @returns {Promise<{text: string, usage?: object, model: string}>}
  */
-export async function streamChat({ apiKey, model, messages, temperature = 0.3, maxTokens = 2048, signal, onToken }) {
+export async function streamChat({ apiKey, model, messages, temperature = 0.3, maxTokens = 2048, signal, onToken, onReasoning }) {
   const t = target(apiKey, 'chat/completions');
   const res = await fetch(t.url, {
     method: 'POST',
@@ -72,7 +72,9 @@ export async function streamChat({ apiKey, model, messages, temperature = 0.3, m
       try {
         const json = JSON.parse(payload);
         if (json.error) throw new GroqError(json.error.message || 'Stream error');
-        const delta = json.choices?.[0]?.delta?.content || '';
+        const d = json.choices?.[0]?.delta || {};
+        if (d.reasoning) onReasoning?.(d.reasoning);
+        const delta = d.content || '';
         if (delta) {
           text += delta;
           onToken?.(delta, text);
@@ -99,7 +101,9 @@ export async function completeJSON({ apiKey, model, system, user, maxTokens = 40
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      max_tokens: maxTokens,
+      // reasoning models spend tokens thinking first, so leave headroom and keep effort low
+      max_tokens: maxTokens + 1200,
+      ...(/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
       response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     }),
@@ -123,7 +127,7 @@ export async function listModels(apiKey) {
   if (!res.ok) throw await errorFrom(res, t.proxy);
   const data = await res.json();
   return (data.data || [])
-    .filter(m => m.active !== false && !/whisper|tts|guard|playai|orpheus|prompt-guard|distil/i.test(m.id))
+    .filter(m => m.active !== false && !/whisper|tts|guard|playai|orpheus|distil|allam/i.test(m.id) && !(m.context_window && m.context_window < 8000))
     .map(m => ({ id: m.id, ctx: m.context_window, owner: m.owned_by }))
     .sort((a, b) => a.id.localeCompare(b.id));
 }

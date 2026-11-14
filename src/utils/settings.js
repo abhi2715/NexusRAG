@@ -1,23 +1,25 @@
 const KEY = 'nexusrag_settings_v2';
 
-export const DEFAULT_MODEL = process.env.REACT_APP_GROQ_MODEL || 'llama-3.3-70b-versatile';
+export const DEFAULT_MODEL = process.env.REACT_APP_GROQ_MODEL || 'openai/gpt-oss-120b';
+
+// Best-first preference when the saved model isn't offered by the account anymore.
+export const PREFERRED_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
 
 // Shown before the live model list loads (or if it can't be fetched).
-export const FALLBACK_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
-  'meta-llama/llama-4-scout-17b-16e-instruct',
-  'qwen/qwen3-32b',
-];
+export const FALLBACK_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+
+/** Pick a model the account actually has: keep `current` if listed, else the best preferred one. */
+export function pickModel(current, available) {
+  const ids = available.map(m => m.id);
+  if (ids.includes(current)) return current;
+  return PREFERRED_MODELS.find(id => ids.includes(id)) || ids[0] || current;
+}
 
 export const DEFAULT_SETTINGS = {
   apiKey: '',
   model: DEFAULT_MODEL,
   temperature: 0.3,
-  maxTokens: 2048,
+  maxTokens: 4096,
   topK: 8,
   contextChars: 14000,
   historyTurns: 6,

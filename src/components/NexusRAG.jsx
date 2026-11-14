@@ -15,7 +15,7 @@ import { useIsMobile, useIsTouch } from '../hooks/useMediaQuery';
 import { useSpeak } from '../hooks/useSpeech';
 import { retrieve, buildContext } from '../utils/nlp';
 import { streamChat, completeJSON, listModels, stripThinking, checkServerKey } from '../utils/groq';
-import { effectiveApiKey, FALLBACK_MODELS } from '../utils/settings';
+import { effectiveApiKey, FALLBACK_MODELS, pickModel } from '../utils/settings';
 import { exportSession, download } from '../utils/exporters';
 import { uid, ACCEPT } from '../utils/format';
 
@@ -105,6 +105,16 @@ export default function NexusRAG() {
     return () => { cancelled = true; };
   }, [apiKey, canChat]);
 
+  // If the saved model isn't offered by this account (e.g. retired), switch to the best available one.
+  useEffect(() => {
+    if (!models.some(m => m.ctx)) return; // still the static fallback list
+    const next = pickModel(settings.model, models);
+    if (next !== settings.model) {
+      update({ model: next });
+      toast(`${settings.model.split('/').pop()} isn't available. Switched to ${next.split('/').pop()}.`, 'info', 5000);
+    }
+  }, [models, settings.model, update, toast]);
+
   const focusInput = useCallback(() => setTimeout(() => inputRef.current?.focus(), 30), []);
 
   // ── Document summaries ───────────────────────────────────────────────────
@@ -162,6 +172,7 @@ export default function NexusRAG() {
     abortRef.current = controller;
     const t0 = performance.now();
     let text = '';
+    let reasoning = false;
     let sources = [];
 
     try {
@@ -191,6 +202,9 @@ export default function NexusRAG() {
         messages: [{ role: 'system', content: system }, ...prior, { role: 'user', content: userMsg.content }],
         signal: controller.signal,
         onToken: (_, full) => { text = full; if (!raf) raf = requestAnimationFrame(flush); },
+        onReasoning: () => {
+          if (!reasoning && !text) { reasoning = true; setPending({ sid, msg: { ...placeholder, stage: 'Reasoning…' } }); }
+        },
       });
       if (raf) cancelAnimationFrame(raf);
 
